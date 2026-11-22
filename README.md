@@ -4,7 +4,7 @@ Build a TrailMix support agent that chooses tools in a **reason → act → obse
 
 ## Start with main.py
 
-This version uses Python files. **`main.py` is the one entry point.** The other files give each part of the program a clear job:
+This version uses Python files. **Start the program by running `main.py`.** It imports functions and settings from the other `.py` files automatically. Each file has one clear job:
 
 ```text
 CWRU-Fall-2026-Session-11/
@@ -43,14 +43,34 @@ Likewise, `from agent import build_agent` imports the function that creates the 
 
 ## How the files work together
 
-| File | Question it answers |
+In this diagram, an arrow means **“uses functions or settings from this file.”** It does not mean that a second Python program or terminal is started.
+
+```mermaid
+flowchart LR
+    MAIN["main.py<br/>START HERE<br/>Choose the exercise"]
+    CONFIG["config.py<br/>Settings, keys, paths, and logging"]
+    TOOLS["tools.py<br/>Four tools and refund checks"]
+    AGENT["agent.py<br/>Build and run the agent loop"]
+    APPROVALS["approvals.py<br/>Ask approve or reject<br/>Check one-use permissions"]
+    TICKETS["tickets.py<br/>Run and score six complaints"]
+
+    MAIN -->|"Load setup"| CONFIG
+    MAIN -->|"Tool demo and handbook readiness"| TOOLS
+    MAIN -->|"Complaint or read-only exercise"| AGENT
+    MAIN -->|"Practice refund review"| APPROVALS
+    MAIN -->|"--tickets"| TICKETS
+```
+
+The diagram shows the connections to `main.py`. Inside those modules, `agent.py` also uses `tools.py` and `approvals.py`; `tools.py` checks approval before writing a refund; and `tickets.py` runs each complaint through `agent.py`. The shared settings come from `config.py`.
+
+| File | What it does, simply |
 | --- | --- |
-| `main.py` | Which exercise did the student ask to run? |
-| `config.py` | Which model, index, data files, keys, and limits should we use? |
-| `tools.py` | What can the model do, and what checks must each action pass? |
-| `approvals.py` | Did a person approve this exact order and amount? |
-| `agent.py` | Which tool does the model choose next, and when does it stop? |
-| `tickets.py` | Did each complaint request the expected tools and finish within the budget? |
+| `main.py` | Reads your terminal command, checks setup, and starts the exercise you chose. Its `main()` function is where the application begins. |
+| `config.py` | Holds the model names, Pinecone settings, file paths, prompts, and step limit. `load_config()` reads `.env`; `configure_logging()` sets up terminal messages. Edit settings here before starting the program. |
+| `tools.py` | Defines `lookup_order`, `search_handbook`, `draft_reply`, and `issue_refund`. It also reads order details, connects to the existing handbook, and checks refund eligibility. |
+| `approvals.py` | Shows a proposed refund and reads the person's decision. It creates a permission for the exact approved order and amount, then lets the refund tool use that permission once. |
+| `agent.py` | `build_agent()` gives Gemini its tools and rules. `run_agent()` follows tool choices, logs results, pauses for approval when needed, and returns the reply or stop status. |
+| `tickets.py` | `run_tickets()` loads the six test complaints, runs the agent on each one, and prints how many requested the expected tools without stopping early. |
 
 The normal execution order is:
 
@@ -90,6 +110,36 @@ Get `GOOGLE_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey)
 | Handbook | Existing Pinecone `trailmix-handbook`, namespace `heading-800`, top 4 results |
 
 **Session 10 must already be ingested.** This lab only reads that existing namespace. It never creates, deletes, or upserts Pinecone records. If the namespace is empty, go to Session 10 and run `python chatbot.py --ingest` there.
+
+## How to run the Python files
+
+After the first-time setup above, open a terminal in the repository folder: the folder containing `main.py`. Activate your existing environment, then choose one command below.
+
+```bash
+# macOS or Linux: activate the environment in each new terminal.
+source .venv/bin/activate
+
+# Show the available commands. This works without API keys.
+python main.py --help
+
+# Start with the individual-tool exercise.
+python main.py --demo-tools
+```
+
+On Windows PowerShell, use `.\.venv\Scripts\Activate.ps1` instead of `source .venv/bin/activate`; the `python main.py ...` commands are the same.
+
+**Run `main.py` for every exercise.** The other five Python files are modules that it imports; they do not have separate exercise commands.
+
+| What you want to do | Command | What you will see |
+| --- | --- | --- |
+| See the options | `python main.py --help` | A list of modes and arguments. |
+| Try tools one at a time | `python main.py --demo-tools` | Order lookup results, refund checks, optional live search/drafting, and a practice approval prompt. |
+| Run the read-only agent | `python main.py --read-only "Can I return worn boots? Order T-1007."` | Tool choices, retrieved facts, and a reply; the refund tool is unavailable. |
+| Run the full agent | `python main.py "My stove smells of gas. Order T-1042. I want my money back."` | The tool-calling trace, a reply, and an approval prompt if the model proposes a refund. |
+| Run the six test complaints | `python main.py --tickets` | Each complaint's trace, a check/cross, and the final routing score. Refund proposals still need human approval. |
+| Show extra logging | `python main.py --tickets --verbose` | The same test run with DEBUG messages enabled. |
+
+Keep a multiword complaint inside quotation marks so Python receives it as one message. Use one exercise mode per command; `--verbose` can be added to any mode. Follow the four exercises below in order.
 
 ## Four exercises from one entry point
 
