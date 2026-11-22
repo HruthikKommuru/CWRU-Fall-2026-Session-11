@@ -25,6 +25,18 @@ CWRU-Fall-2026-Session-11/
 
 Read the files in this order: **main.py → config.py → tools.py → approvals.py → agent.py → tickets.py**. Each file starts with its purpose, and comments explain the code blocks. The earlier notebooks are available in Git history; the current exercise is entirely in `.py` files.
 
+### A first reading of the code
+
+Start at the `main()` function in `main.py`. It reads your command, checks setup, and chooses an exercise. The numbered comments in each exercise show its steps. Functions above `main()` are named pieces of work that it calls when needed.
+
+For a complaint, follow these three functions:
+
+1. **`build_agent()` in `agent.py`** gives Gemini the instructions and tools. Full mode adds a rule that pauses before a refund.
+2. **`run_agent()` in `agent.py`** calls `agent.invoke(...)`. LangChain runs the model/tool loop inside that call until it finishes or needs approval.
+3. **`review_actions()` in `approvals.py`** shows each proposed refund and waits for you to type `approve` or `reject`. `Command(resume=decisions)` passes your answer back to the paused agent.
+
+You will see ordinary lists and dictionaries throughout the files. A list such as `decisions = []` holds several items. A dictionary such as `{"order_id": "T-1042", "amount": 89}` labels each value; `details["order_id"]` reads the order ID. `return` gives a function's result back to the code that called it.
+
 ### What an import means
 
 In `main.py`, this line:
@@ -65,11 +77,11 @@ The diagram shows the connections to `main.py`. Inside those modules, `agent.py`
 
 | File | What it does, simply |
 | --- | --- |
-| `main.py` | Reads your terminal command, checks setup, and starts the exercise you chose. Its `main()` function is where the application begins. |
+| `main.py` | `main()` checks setup and starts the chosen exercise. `read_arguments()` reads your command. `run_tool_demo()` tries the tools, and `practice_refund()` handles the practice approval. |
 | `config.py` | Holds the model names, Pinecone settings, file paths, prompts, and step limit. `load_config()` reads `.env`; `configure_logging()` sets up terminal messages. Edit settings here before starting the program. |
 | `tools.py` | Defines `lookup_order`, `search_handbook`, `draft_reply`, and `issue_refund`. It also reads order details, connects to the existing handbook, and checks refund eligibility. |
 | `approvals.py` | Shows a proposed refund and reads the person's decision. It creates a permission for the exact approved order and amount, then lets the refund tool use that permission once. |
-| `agent.py` | `build_agent()` gives Gemini its tools and rules. `run_agent()` follows tool choices, logs results, pauses for approval when needed, and returns the reply or stop status. |
+| `agent.py` | `build_agent()` gives Gemini its tools and rules. `run_agent()` runs, asks about pending refunds, and resumes. `count_steps()` counts the work; `log_message()` explains a recorded tool choice or result. |
 | `tickets.py` | `run_tickets()` loads the six test complaints, runs the agent on each one, and prints how many requested the expected tools without stopping early. |
 
 The normal execution order is:
@@ -193,7 +205,9 @@ Each `@tool` function has typed arguments and a docstring that the model reads w
 
 ## What approval actually does
 
-`approvals.py` keeps a small set of one-use permissions: **(order ID, amount)** pairs. Only the human-input function adds a permission. `issue_refund` must consume a matching permission before writing, so even a direct tool call cannot bypass approval.
+`approvals.py` keeps a plain list of approved refunds. Each item is a dictionary with an **order ID and amount**. Only the human-input function adds an item. `consume_approval()` looks for the same order and amount, removes that item, and returns `True`. It returns `False` if no match exists. This lets `issue_refund` check approval even when called directly.
+
+For example, approving T-1042 for 89 dollars allows that exact refund once. A request for T-1042 for 88 dollars, or for another order, has no matching approval. `clear_approvals()` empties the list at the start and end of a complaint.
 
 `tools.py` also checks that the order exists and is delivered, the amount is positive and finite, uses whole cents, does not exceed the price, and has not already been refunded. A lock prevents concurrent duplicate writes. The ledger is `output/refunds.csv`, created on the first approved refund and ignored by Git; restarting Python does not erase it.
 
@@ -201,13 +215,15 @@ The model can propose an action; only the person can authorize it. Approve only 
 
 ## Read the logs
 
+The approval prompt appears as soon as the agent pauses. When the run finishes or stops, the program prints the recorded tool choices and results, then the full conversation. This keeps the run loop short and easy to follow; tool logs are printed together rather than streamed live.
+
 - **REASON** — observable tool choices, not hidden model reasoning.
 - **ACT (proposed)** — tool name and arguments, before any approval decision.
 - **OBSERVE** — the first 150 characters of a tool result.
 - **APPROVAL** — the person's decision.
 - **DONE** — the reply/last state and update count, followed by the full message trace.
 
-`MAX_STEPS = 10` in `config.py` bounds the run; approval resumes retain a remaining update budget. LangGraph also enforces its graph recursion limit, which counts internal work rather than only visible tool calls. To demonstrate an early stop, set `MAX_STEPS = 1`, run the read-only exercise, then restore 10. Values outside 1–10 fail setup.
+`MAX_STEPS = 10` in `config.py` bounds the run; approval resumes retain a remaining budget. `count_steps()` counts each model message as one step and consecutive tool replies as one tool step, because several tools can run together. LangGraph also enforces its graph recursion limit, which counts internal work. To demonstrate an early stop, set `MAX_STEPS = 1`, run the read-only exercise, then restore 10. Values outside 1–10 fail setup.
 
 ## Done means
 

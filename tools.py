@@ -25,21 +25,27 @@ _refund_lock = Lock()
 
 def read_order(order_id: str) -> dict | None:
     """Read the support fields for one order without loading identity columns."""
-    rows = pd.read_csv(ORDERS_PATH, usecols=ORDER_FIELDS, keep_default_na=False)
-    matches = rows.loc[rows["order_id"] == order_id]
-    if matches.empty:
-        return None
-    return matches.iloc[0].to_dict()
+    # Load only the support columns, then check one order at a time.
+    orders = pd.read_csv(ORDERS_PATH, usecols=ORDER_FIELDS, keep_default_na=False)
+    for order in orders.to_dict("records"):
+        if order["order_id"] == order_id:
+            return order
+    return None
 
 
 def get_store() -> PineconeVectorStore:
     """Read the existing Session 10 index and check that its namespace contains records."""
-    pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
-    description = pc.describe_index(INDEX_NAME)
-    index = pc.Index(host=description.host)
-    namespace = index.describe_index_stats().namespaces.get(NAMESPACE)
+    # Connect to the index that Session 10 already created.
+    pinecone = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
+    description = pinecone.describe_index(INDEX_NAME)
+    index = pinecone.Index(host=description.host)
+
+    # A namespace is a named group of saved handbook pieces inside that index.
+    statistics = index.describe_index_stats()
+    namespace = statistics.namespaces.get(NAMESPACE)
     if namespace is None or namespace.vector_count == 0:
         raise RuntimeError(EMPTY_HANDBOOK)
+    # Embeddings turn the search question into numbers that Pinecone can compare.
     embeddings = init_embeddings(EMBEDDING_MODEL)
     return PineconeVectorStore(index=index, embedding=embeddings, namespace=NAMESPACE)
 
@@ -49,10 +55,11 @@ def get_store() -> PineconeVectorStore:
 def lookup_order(order_id: str) -> str:
     """Find an order before acting on it; use an exact T- order ID. Return order details or a missing-order/error message."""
     try:
-        row = read_order(order_id)
-        if row is None:
+        order = read_order(order_id)
+        if order is None:
             return f"No order {order_id} found."
-        return json.dumps(row)
+        # JSON is dictionary-shaped text that the model can read.
+        return json.dumps(order)
     except Exception:
         return "Order lookup unavailable. Check data/orders.csv."
 
@@ -64,6 +71,8 @@ def search_handbook(query: str) -> str:
     try:
         store = get_store()
         pieces = store.similarity_search(query, k=K, namespace=NAMESPACE)
+
+        # Put a heading citation above each matching handbook piece.
         excerpts = []
         for piece in pieces:
             label = piece.metadata.get("section", "Front matter")
@@ -82,11 +91,17 @@ def search_handbook(query: str) -> str:
 def draft_reply(situation: str) -> str:
     """Draft a short polite reply after collecting verified facts and cited policy. Return a draft, or an error; never send it."""
     try:
+        # Step 1: combine the writing rules with the verified support facts.
         prompt = ChatPromptTemplate.from_messages([
             ("system", DRAFT_REPLY_PROMPT), ("human", "{situation}")
         ])
+        # Step 2: let Gemini draft a reply, retrying temporary failures up to 3 times.
         model = init_chat_model(CHAT_MODEL)
-        chain = prompt | model.with_retry(stop_after_attempt=3) | StrOutputParser()
+        model = model.with_retry(stop_after_attempt=3)
+
+        # Step 3: turn the model's message into plain text. | means "pass to the next step".
+        parser = StrOutputParser()
+        chain = prompt | model | parser
         return chain.invoke({"situation": situation})
     except Exception:
         return "Reply drafting unavailable. Check your Google key; for 429/500, wait and retry."
@@ -99,15 +114,17 @@ def issue_refund(order_id: str, amount: float) -> str:
     with _refund_lock:
         try:
             # First check the order. Missing or undelivered orders cannot be refunded.
-            row = read_order(order_id)
-            if row is None:
+            order = read_order(order_id)
+            if order is None:
                 return f"No order {order_id} found."
-            if row["status"] != "delivered":
+            if order["status"] != "delivered":
                 return "Refund refused: order must be delivered."
 
             # Decimal compares money accurately; invalid values and fractions of a cent are refused.
             value = Decimal(str(amount))
-            if not value.is_finite() or value <= 0 or value > Decimal(str(row["price"])):
+            price = Decimal(str(order["price"]))
+            valid_amount = value.is_finite() and value > 0 and value <= price
+            if not valid_amount:
                 return "Refund refused: amount must be positive and no greater than the order price."
             if value != value.quantize(Decimal("0.01")):
                 return "Refund refused: use whole cents."

@@ -1,6 +1,5 @@
-"""Build and run the agent loop. Start the application with main.py."""
+"""Create the agent, run a complaint, and pause when a person must approve a refund."""
 import logging
-from typing import Any
 from uuid import uuid4
 
 from langchain.agents import create_agent
@@ -18,83 +17,83 @@ from tools import ALL_TOOLS, READ_ONLY_TOOLS
 logger = logging.getLogger(__name__)
 
 
-def build_agent(read_only: bool = False, model: Any = None) -> Any:
-    """Give Gemini its tools, instructions, and approval gate."""
-    # A test can supply a local scripted model; normal runs always create Gemini.
+def build_agent(read_only: bool = False, model=None):
+    """Give Gemini its instructions, available tools, and refund approval rule."""
+    # 1. Create Gemini. Local tests can supply a pretend model instead.
     if model is None:
         model = init_chat_model(CHAT_MODEL)
 
-    # Read-only mode cannot refund because that tool is not available to the model.
-    active_tools = READ_ONLY_TOOLS
+    # 2. Choose the tools. Full mode pauses BEFORE issue_refund can run.
+    tools = READ_ONLY_TOOLS
     middleware = []
     if not read_only:
-        active_tools = ALL_TOOLS
-        approval = HumanInTheLoopMiddleware(interrupt_on={"issue_refund": True})
-        middleware.append(approval)
+        tools = ALL_TOOLS
+        approval_rule = HumanInTheLoopMiddleware(interrupt_on={"issue_refund": True})
+        middleware = [approval_rule]
 
-    # The checkpointer remembers a paused run until the person reviews its action.
+    # 3. Memory saves the conversation while the person makes a decision.
     return create_agent(
-        model=model, tools=active_tools, system_prompt=SYSTEM_PROMPT,
-        middleware=middleware, checkpointer=InMemorySaver(),
+        model=model,
+        tools=tools,
+        system_prompt=SYSTEM_PROMPT,
+        middleware=middleware,
+        checkpointer=InMemorySaver(),
     )
 
 
-def log_message(message: Any) -> None:
-    """Show observable tool choices and returned results, not hidden reasoning."""
-    if isinstance(message, AIMessage) and message.tool_calls:
-        choices = []
+def count_steps(messages: list) -> int:
+    """Count model turns and tool-result groups in the conversation."""
+    steps = 0
+    previous_was_tool = False
+    for message in messages:
+        # Several tools may run together. Their consecutive replies form one tool step.
+        is_tool = isinstance(message, ToolMessage)
+        if isinstance(message, AIMessage):
+            steps += 1
+        elif is_tool and not previous_was_tool:
+            steps += 1
+        previous_was_tool = is_tool
+    return steps
+
+
+def log_message(message) -> None:
+    """Show the model's proposed tools or a tool's returned result."""
+    if isinstance(message, AIMessage):
         for call in message.tool_calls:
-            choices.append(call["name"])
-        logger.info("REASON | model selected %s", choices)
-        for call in message.tool_calls:
+            logger.info("REASON | model selected %s", call["name"])
             logger.info("ACT (proposed) | %s %s", call["name"], call["args"])
     elif isinstance(message, ToolMessage):
         logger.info("OBSERVE | %s", str(message.content)[:150])
 
 
-def run_agent(agent: Any, message: str, thread_id: str | None = None) -> dict:
-    """Run one complaint, review pending refunds, and return its messages and status."""
+def run_agent(agent, message: str, thread_id=None) -> dict:
+    """Run, check for approval, and resume until the complaint is finished."""
+    # 1. Give each complaint its own ID. Keep that ID when resuming after approval.
     if thread_id is None:
         thread_id = str(uuid4())
-    run_config = {"recursion_limit": MAX_STEPS, "configurable": {"thread_id": thread_id}}
+    settings = {"recursion_limit": MAX_STEPS, "configurable": {"thread_id": thread_id}}
     request = {"messages": [{"role": "user", "content": message}]}
     result = {"messages": []}
-    seen_messages = 0
     steps = 0
     stopped = False
     clear_approvals()
 
     try:
         while True:
-            pending = []
-            run_config["recursion_limit"] = max(1, MAX_STEPS - steps)
+            # 2. invoke() runs until the agent finishes OR pauses for human approval.
+            settings["recursion_limit"] = max(1, MAX_STEPS - steps)
+            result = agent.invoke(request, config=settings)
+            steps = count_steps(result["messages"])
 
-            # Each event contains the current conversation; inspect only new messages.
-            for event in agent.stream(request, config=run_config, stream_mode="values"):
-                if "__interrupt__" in event:
-                    pending = event["__interrupt__"]
-                    continue
-                result = event
-                new_messages = result["messages"][seen_messages:]
-                seen_messages = len(result["messages"])
-                model_or_tool_updated = False
-                for current_message in new_messages:
-                    if isinstance(current_message, (AIMessage, ToolMessage)):
-                        model_or_tool_updated = True
-                    log_message(current_message)
-                if model_or_tool_updated:
-                    steps += 1
-
-                # A completed final answer is allowed at the limit; another action is not.
-                last_message = result["messages"][-1]
-                finished = isinstance(last_message, AIMessage) and not last_message.tool_calls
-                if steps >= MAX_STEPS and not finished:
-                    raise GraphRecursionError("Local step budget exhausted.")
-
+            # 3. No interrupt means the agent has finished this complaint.
+            pending = result.get("__interrupt__", [])
             if not pending:
                 break
+            # Resuming needs room for the tool result and the model's next message.
+            if MAX_STEPS - steps < 2:
+                raise GraphRecursionError("No steps left for another action.")
 
-            # The model has stopped. A person decides, then the same run resumes.
+            # 4. Show the proposed refund and resume with the person's decision.
             actions = pending[0].value["action_requests"]
             decisions = review_actions(actions)
             request = Command(resume=decisions)
@@ -109,15 +108,21 @@ def run_agent(agent: Any, message: str, thread_id: str | None = None) -> dict:
         logger.error("Agent request failed. Check your keys; for 429/500, wait and retry.")
         stopped = True
     finally:
-        # A failed or cancelled run must not leave unused permissions for another run.
+        # An approval from this complaint cannot be used by a later complaint.
         clear_approvals()
+        if stopped:
+            # Keep the partial trace even if a limit, cancelled input, or API error stopped us.
+            result = agent.get_state(settings).values
 
-    result["steps"] = steps
-    result["stopped"] = stopped
+    # 5. Print the recorded steps and full conversation after the run ends.
+    messages = result.get("messages", [])
+    for saved_message in messages:
+        log_message(saved_message)
+    steps = count_steps(messages)
     final_text = "No answer."
-    if result["messages"]:
-        final_text = result["messages"][-1].content
+    if messages:
+        final_text = messages[-1].content
     logger.info("DONE | %s | %d steps", final_text, steps)
-    for current_message in result["messages"]:
-        current_message.pretty_print()
-    return result
+    for saved_message in messages:
+        saved_message.pretty_print()
+    return {"messages": messages, "steps": steps, "stopped": stopped}

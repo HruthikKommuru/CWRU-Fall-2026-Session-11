@@ -5,12 +5,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # These are settings, not classes. Both models use the same private Google key.
-EMBEDDING_MODEL = "google_genai:gemini-embedding-001"
-CHAT_MODEL = "google_genai:gemini-3.7-flash"
-INDEX_NAME = "trailmix-handbook"
-NAMESPACE = "heading-800"
-K = 4
-MAX_STEPS = 10
+EMBEDDING_MODEL = "google_genai:gemini-embedding-001"  # Turn text into search numbers.
+CHAT_MODEL = "google_genai:gemini-3.7-flash"  # Choose tools and write replies.
+INDEX_NAME = "trailmix-handbook"  # The existing Pinecone index from Session 10.
+NAMESPACE = "heading-800"  # The group of handbook chunks inside that index.
+K = 4  # Retrieve up to four handbook chunks for each search.
+MAX_STEPS = 10  # Stop a run that keeps asking for more work.
 
 # Paths start beside this file, so the program can find data from any working folder.
 ROOT = Path(__file__).parent
