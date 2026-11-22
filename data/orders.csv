@@ -1,0 +1,32 @@
+order_id,customer_name,product,price,status,delivered_date
+T-1001,Fictional Shopper 01,Ridge 2P Tent,329,delivered,2026-11-06
+T-1002,Fictional Shopper 02,Summit Stove,89,delivered,2026-11-07
+T-1003,Fictional Shopper 03,Trail Socks,39,delivered,2026-11-08
+T-1004,Fictional Shopper 04,Beacon 400 Headlamp,49,delivered,2026-11-09
+T-1005,Fictional Shopper 05,Ridgeline Hiking Boot,179,delivered,2026-11-10
+T-1006,Fictional Shopper 06,Alpine 45L Backpack,189,delivered,2026-11-11
+T-1007,Fictional Shopper 07,Ridgeline Hiking Boot,179,delivered,2026-11-12
+T-1008,Fictional Shopper 08,Ridge 2P Tent,329,delivered,2026-11-13
+T-1009,Fictional Shopper 09,Summit Stove,89,processing,
+T-1010,Fictional Shopper 10,Trail Socks,39,delivered,2026-11-15
+T-1011,Fictional Shopper 11,Beacon 400 Headlamp,49,delivered,2026-11-16
+T-1012,Fictional Shopper 12,Ridgeline Hiking Boot,179,delivered,2026-11-17
+T-1013,Fictional Shopper 13,Alpine 45L Backpack,189,delivered,2026-11-18
+T-1014,Fictional Shopper 14,Drift 20°F Sleeping Bag,169,delivered,2026-11-19
+T-1015,Fictional Shopper 15,Ridge 2P Tent,329,shipped,
+T-1016,Fictional Shopper 16,Summit Stove,89,delivered,2026-11-06
+T-1017,Fictional Shopper 17,Trail Socks,39,delivered,2026-11-07
+T-1018,Fictional Shopper 18,Beacon 400 Headlamp,49,delivered,2026-11-08
+T-1019,Fictional Shopper 19,Ridgeline Hiking Boot,179,delivered,2026-11-09
+T-1020,Fictional Shopper 20,Alpine 45L Backpack,189,delivered,2026-11-10
+T-1021,Fictional Shopper 21,Ridge 2P Tent,329,delivered,2026-11-11
+T-1022,Fictional Shopper 22,Ridge 2P Tent,329,delivered,2026-11-12
+T-1023,Fictional Shopper 23,Summit Stove,89,delivered,2026-11-13
+T-1024,Fictional Shopper 24,Trail Socks,39,delivered,2026-11-14
+T-1025,Fictional Shopper 25,Beacon 400 Headlamp,49,delivered,2026-11-15
+T-1026,Fictional Shopper 26,Ridgeline Hiking Boot,179,delivered,2026-11-16
+T-1027,Fictional Shopper 27,Alpine 45L Backpack,189,delivered,2026-11-17
+T-1028,Fictional Shopper 28,Drift 20°F Sleeping Bag,169,cancelled,
+T-1029,Fictional Shopper 29,Ridge 2P Tent,329,delivered,2026-11-19
+T-1030,Fictional Shopper 30,Summit Stove,89,delivered,2026-11-05
+T-1042,Jordan Lee,Summit Stove,89,delivered,2026-11-13
