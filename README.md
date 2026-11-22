@@ -1,104 +1,10 @@
 # Session 11 · AI Agents
 
-Build a TrailMix support agent that chooses tools in a **reason → act → observe** loop. It checks the existing support handbook, looks up a fictional order, drafts a reply, and can propose a fake refund. Refunds require a person's approval and Python guardrail checks. TrailMix Outdoors and all orders are fictional; replies are drafts and no real money moves.
-
-## Start with main.py
-
-This version uses Python files. **Start the program by running `main.py`.** It imports functions and settings from the other `.py` files automatically. Each file has one clear job:
-
-```text
-CWRU-Fall-2026-Session-11/
-├── main.py             # Choose an exercise and start it
-├── config.py           # Model names, paths, keys, limits, logging
-├── tools.py            # The four tools and their order/refund checks
-├── approvals.py        # Ask a person and manage one-use refund permissions
-├── agent.py            # Build the agent and run its tool-calling loop
-├── tickets.py          # Run and score the six supplied complaints
-├── data/
-│   ├── orders.csv
-│   └── test_tickets.csv
-├── README.md
-├── requirements.txt
-├── .env.example
-└── .gitignore
-```
-
-Read the files in this order: **main.py → config.py → tools.py → approvals.py → agent.py → tickets.py**. Each file starts with its purpose, and comments explain the code blocks. The earlier notebooks are available in Git history; the current exercise is entirely in `.py` files.
-
-### A first reading of the code
-
-Start at the `main()` function in `main.py`. It reads your command, checks setup, and chooses an exercise. The numbered comments in each exercise show its steps. Functions above `main()` are named pieces of work that it calls when needed.
-
-For a complaint, follow these three functions:
-
-1. **`build_agent()` in `agent.py`** gives Gemini the instructions and tools. Full mode adds a rule that pauses before a refund.
-2. **`run_agent()` in `agent.py`** calls `agent.invoke(...)`. LangChain runs the model/tool loop inside that call until it finishes or needs approval.
-3. **`review_actions()` in `approvals.py`** shows each proposed refund and waits for you to type `approve` or `reject`. `Command(resume=decisions)` passes your answer back to the paused agent.
-
-You will see ordinary lists and dictionaries throughout the files. A list such as `decisions = []` holds several items. A dictionary such as `{"order_id": "T-1042", "amount": 89}` labels each value; `details["order_id"]` reads the order ID. `return` gives a function's result back to the code that called it.
-
-### What an import means
-
-In `main.py`, this line:
-
-```python
-from tools import lookup_order
-```
-
-means “bring in the `lookup_order` tool defined in `tools.py`.” It does not create a class or start an agent. Calling the tool with `.invoke(...)` runs it:
-
-```python
-lookup_order.invoke({"order_id": "T-1042"})
-```
-
-Likewise, `from agent import build_agent` imports the function that creates the agent. Importing our files defines functions and registers tools; Gemini requests and refund writes happen only when the program calls the relevant functions.
-
-## How the files work together
-
-In this diagram, an arrow means **“uses functions or settings from this file.”** It does not mean that a second Python program or terminal is started.
-
-```mermaid
-flowchart LR
-    MAIN["main.py<br/>START HERE<br/>Choose the exercise"]
-    CONFIG["config.py<br/>Settings, keys, paths, and logging"]
-    TOOLS["tools.py<br/>Four tools and refund checks"]
-    AGENT["agent.py<br/>Build and run the agent loop"]
-    APPROVALS["approvals.py<br/>Ask approve or reject<br/>Check one-use permissions"]
-    TICKETS["tickets.py<br/>Run and score six complaints"]
-
-    MAIN -->|"Load setup"| CONFIG
-    MAIN -->|"Tool demo and handbook readiness"| TOOLS
-    MAIN -->|"Complaint or read-only exercise"| AGENT
-    MAIN -->|"Practice refund review"| APPROVALS
-    MAIN -->|"--tickets"| TICKETS
-```
-
-The diagram shows the connections to `main.py`. Inside those modules, `agent.py` also uses `tools.py` and `approvals.py`; `tools.py` checks approval before writing a refund; and `tickets.py` runs each complaint through `agent.py`. The shared settings come from `config.py`.
-
-| File | What it does, simply |
-| --- | --- |
-| `main.py` | `main()` checks setup and starts the chosen exercise. `read_arguments()` reads your command. `run_tool_demo()` tries the tools, and `practice_refund()` handles the practice approval. |
-| `config.py` | Holds the model names, Pinecone settings, file paths, prompts, and step limit. `load_config()` reads `.env`; `configure_logging()` sets up terminal messages. Edit settings here before starting the program. |
-| `tools.py` | Defines `lookup_order`, `search_handbook`, `draft_reply`, and `issue_refund`. It also reads order details, connects to the existing handbook, and checks refund eligibility. |
-| `approvals.py` | Shows a proposed refund and reads the person's decision. It creates a permission for the exact approved order and amount, then lets the refund tool use that permission once. |
-| `agent.py` | `build_agent()` gives Gemini its tools and rules. `run_agent()` runs, asks about pending refunds, and resumes. `count_steps()` counts the work; `log_message()` explains a recorded tool choice or result. |
-| `tickets.py` | `run_tickets()` loads the six test complaints, runs the agent on each one, and prints how many requested the expected tools without stopping early. |
-
-The normal execution order is:
-
-```text
-main.py loads settings and checks setup
-  -> agent.py creates Gemini's agent with tools from tools.py
-  -> the model chooses a tool and receives its result
-  -> approvals.py reviews a proposed refund before it can execute
-  -> the agent returns a reply and prints its trace
-```
-
-`--tickets` adds `tickets.py`, which sends six complaints through that same agent. No file is named `lab`, and no `lab` alias is used.
+Run a TrailMix support agent that checks the handbook, looks up an order, drafts a reply, and can propose a refund. TrailMix and all orders are fictional. Refunds require human approval and are recorded in a local CSV; no real money moves.
 
 ## Setup
 
-Use **Python 3.13**, which was used to verify the dependency pins. Fork the public repository if you want your own copy, then replace the owner in the clone link with your username.
+Use **Python 3.13**. Fork the repository for your own copy, or clone the workshop repository:
 
 ```bash
 git clone https://github.com/HruthikKommuru/CWRU-Fall-2026-Session-11.git
@@ -106,145 +12,148 @@ cd CWRU-Fall-2026-Session-11
 python3.13 -m venv .venv          # Create the environment once.
 source .venv/bin/activate        # Activate it in this terminal.
 python -m pip install -r requirements.txt
-cp .env.example .env             # Copy once; then enter your private keys.
+cp .env.example .env             # Copy once, then enter your private keys.
 ```
 
-On Windows PowerShell, create with `py -3.13 -m venv .venv`, activate with `.\.venv\Scripts\Activate.ps1`, and copy the key template with `Copy-Item .env.example .env`. In Command Prompt, activate with `.venv\Scripts\activate.bat`.
+On Windows PowerShell, create the environment with `py -3.13 -m venv .venv`, activate with `.\.venv\Scripts\Activate.ps1`, and copy the template with `Copy-Item .env.example .env`. In Command Prompt, activate with `.venv\Scripts\activate.bat`.
 
-In each new terminal, return to this folder and activate the existing environment again. Do not overwrite `.env` or recreate `.venv`. Check `python --version` and `python -m pip --version`; run `deactivate` when finished.
+Add `GOOGLE_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey) and `PINECONE_API_KEY` from the [Pinecone console](https://app.pinecone.io/) to `.env`. The key file and environment folder are ignored by Git. Live service calls use quota and may incur charges.
 
-Get `GOOGLE_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey) and `PINECONE_API_KEY` from the [Pinecone console](https://app.pinecone.io/). The `.env` file holds secrets; `.venv/` holds Python packages. Both are ignored by Git. Live service calls use quota and may incur charges.
+**Session 10 must already be ingested.** The agent reads the existing Pinecone index `trailmix-handbook`, namespace `heading-800`, with up to four results per search. If it is empty, run `python chatbot.py --ingest` in the Session 10 repository first. This repository only reads the index.
 
-| Job | Model / service |
-| --- | --- |
-| Embeddings | Gemini `gemini-embedding-001` |
-| Agent and drafting | Gemini `gemini-3.7-flash` |
-| Handbook | Existing Pinecone `trailmix-handbook`, namespace `heading-800`, top 4 results |
+The models remain Gemini `gemini-embedding-001` for embeddings and `gemini-3.7-flash` for the agent and drafting. Their names and other settings are in `config.py`.
 
-**Session 10 must already be ingested.** This lab only reads that existing namespace. It never creates, deletes, or upserts Pinecone records. If the namespace is empty, go to Session 10 and run `python chatbot.py --ingest` there.
+## How to run
 
-## How to run the Python files
-
-After the first-time setup above, open a terminal in the repository folder: the folder containing `main.py`. Activate your existing environment, then choose one command below.
+Open a terminal in the folder containing `main.py`. In each new terminal, activate the existing environment:
 
 ```bash
-# macOS or Linux: activate the environment in each new terminal.
 source .venv/bin/activate
-
-# Show the available commands. This works without API keys.
-python main.py --help
-
-# Start with the individual-tool exercise.
-python main.py --demo-tools
 ```
 
-On Windows PowerShell, use `.\.venv\Scripts\Activate.ps1` instead of `source .venv/bin/activate`; the `python main.py ...` commands are the same.
+On Windows PowerShell, use `.\.venv\Scripts\Activate.ps1` instead. Run `deactivate` when finished. You only create `.venv` and copy `.env` during the first setup.
 
-**Run `main.py` for every exercise.** The other five Python files are modules that it imports; they do not have separate exercise commands.
-
-| What you want to do | Command | What you will see |
-| --- | --- | --- |
-| See the options | `python main.py --help` | A list of modes and arguments. |
-| Try tools one at a time | `python main.py --demo-tools` | Order lookup results, refund checks, optional live search/drafting, and a practice approval prompt. |
-| Run the read-only agent | `python main.py --read-only "Can I return worn boots? Order T-1007."` | Tool choices, retrieved facts, and a reply; the refund tool is unavailable. |
-| Run the full agent | `python main.py "My stove smells of gas. Order T-1042. I want my money back."` | The tool-calling trace, a reply, and an approval prompt if the model proposes a refund. |
-| Run the six test complaints | `python main.py --tickets` | Each complaint's trace, a check/cross, and the final routing score. Refund proposals still need human approval. |
-| Show extra logging | `python main.py --tickets --verbose` | The same test run with DEBUG messages enabled. |
-
-Keep a multiword complaint inside quotation marks so Python receives it as one message. Use one exercise mode per command; `--verbose` can be added to any mode. Follow the four exercises below in order.
-
-## Four exercises from one entry point
-
-### 1 Try the tools yourself
-
-```bash
-python main.py --demo-tools
-```
-
-This calls each tool explicitly so you can inspect its input and output before the model chooses anything. It checks an existing order, a missing order, and refund refusals, then requests a practice refund of 10 dollars on T-1001. Approve or reject it yourself; an approved first call is followed by a duplicate attempt that must be refused.
-
-Local order/refund checks work without API keys. If both keys are present, the demo also searches the handbook and asks Gemini for a reply draft. Any practice write goes to the same ignored refund ledger as normal runs, so rerunning T-1001 does not reset its refund history.
-
-### 2 Let the model choose read-only tools
-
-```bash
-python main.py --read-only "Can I return boots I wore on one hike? Order T-1007."
-```
-
-The agent receives only `search_handbook`, `lookup_order`, and `draft_reply`. It cannot issue refunds because that tool is not available in this mode. Follow the tool-choice logs and inspect the cited reply.
-
-### 3 Add the human-approved refund tool
+Run one complaint:
 
 ```bash
 python main.py "My stove smells of gas. Order T-1042. I want my money back."
 ```
 
-The full agent gets all four tools. If Gemini proposes a refund, middleware pauses before execution and shows its arguments. Type `approve` or `reject`; any other answer rejects. Approval allows the same run to resume, but the order and amount still have to pass every code guardrail.
-
-Run the message again and choose `reject` to compare the trace. A fresh complaint has a fresh conversation thread; the refund ledger still remembers earlier writes. If the model does not propose a refund, there is no approval prompt: inspect what it actually did.
-
-### 4 Run all six test complaints
+Or run the six supplied test complaints:
 
 ```bash
 python main.py --tickets
-python main.py --tickets --verbose
 ```
 
-The runner prints every trace and a check/cross per ticket. It compares the set of **proposed tool names** with `expected_tools` and rejects stopped or over-budget runs. This checks routing, not the correctness of a final answer or whether a proposed refund executed; inspect citations, human decisions, and the ledger too.
+See the command help without making service calls:
+
+```bash
+python main.py --help
+```
+
+Keep the complaint inside quotation marks. Use one complaint or `--tickets` per command.
+
+If the model proposes a refund, the program shows the exact order and amount and asks `approve / reject`. Type `approve` to allow that request, or `reject` to refuse it. Any other answer rejects. Approval still has to pass the Python refund checks.
+
+At the end, the program prints the tool-choice logs and full conversation. Check the handbook citations and the reply. An approved refund is saved in the ignored file `output/refunds.csv`; running the program again keeps that history.
+
+## What each Python file does
+
+**Start only `main.py`.** It imports the other files as modules. Each module holds functions or settings needed by the final program.
+
+| File | Its job |
+| --- | --- |
+| `main.py` | Read the terminal command, check setup, create the agent, and run the chosen input. |
+| `config.py` | Store model names, prompts, paths, search settings, and the step limit. Load `.env` and set up logging. |
+| `agent.py` | Create the agent, run it, pause for approval, resume, and print its trace. |
+| `tools.py` | Define the four tools, read order details, search the existing handbook, and check and record fake refunds. |
+| `approvals.py` | Ask a person about a proposed refund and keep one-use approval for its exact order and amount. |
+| `tickets.py` | Run the six supplied complaints and compare their proposed tools with the expected tools. |
+
+The inputs are `data/orders.csv` and `data/test_tickets.csv`. The order database has 31 fictional orders: T-1001 through T-1030, plus T-1042.
+
+## How the files connect
+
+An arrow means **uses functions or settings from**. All execution begins in `main.py`.
+
+```mermaid
+flowchart TD
+    MAIN["main.py<br/>START HERE"]
+    CONFIG["config.py<br/>Settings and setup"]
+    AGENT["agent.py<br/>Run and resume the agent"]
+    TOOLS["tools.py<br/>Four support tools"]
+    APPROVALS["approvals.py<br/>Human refund decision"]
+    TICKETS["tickets.py<br/>Six complaint checks"]
+
+    MAIN --> CONFIG
+    MAIN -->|"Check handbook"| TOOLS
+    MAIN -->|"One complaint"| AGENT
+    MAIN -->|"--tickets"| TICKETS
+    TICKETS --> AGENT
+    AGENT --> TOOLS
+    AGENT -->|"Ask the person"| APPROVALS
+    TOOLS -->|"Check exact approval"| APPROVALS
+```
+
+The other modules also read their shared settings from `config.py`.
+
+## Read the code simply
+
+Start with `main()` in `main.py` and follow its numbered comments. `from agent import build_agent` means “use the function named `build_agent` from `agent.py`.” Calling a function runs that piece of work; `return` gives its result back to the caller.
+
+For a complaint, the flow is:
+
+1. `build_agent()` gives Gemini the instructions and all four tools.
+2. `run_agent()` calls `agent.invoke(...)`. LangChain runs the model/tool loop until it finishes or needs approval.
+3. If a refund is pending, `review_actions()` asks the person for a decision.
+4. `Command(resume=decisions)` passes the answer back to the paused agent.
+5. The program prints the recorded steps and conversation.
+
+Lists hold several items, such as `decisions = []`. Dictionaries label values, such as `{"order_id": "T-1042", "amount": 89}`. The expression `details["order_id"]` reads the order ID.
 
 ## The four tools
 
-| Tool in tools.py | What it does | Approval |
-| --- | --- | --- |
-| `lookup_order(order_id)` | Read verified order details from the fake CSV. | No |
-| `search_handbook(query)` | Retrieve up to four excerpts with heading citations. | No |
-| `draft_reply(situation)` | Write a short draft from supplied facts and citations. | No |
-| `issue_refund(order_id, amount)` | Append one fake refund after all checks pass. | **Required** |
+`@tool` lets the model request a Python function. Its docstring describes when to use it, and its argument types describe what inputs it accepts.
 
-Each `@tool` function has typed arguments and a docstring that the model reads when choosing an action. Tool failures return text rather than raw service exceptions. Order lookup loads only the order ID, product, price, status, and delivery date needed for support.
+| Tool | What it does |
+| --- | --- |
+| `lookup_order(order_id)` | Read verified support details for one fictional order. |
+| `search_handbook(query)` | Return up to four matching handbook excerpts with heading citations. |
+| `draft_reply(situation)` | Write a short draft from supplied facts and citations. |
+| `issue_refund(order_id, amount)` | Record a fake refund after human approval and eligibility checks. |
 
-## What approval actually does
+Tools return text, including friendly failure messages. Order lookup loads only the order ID, product, price, status, and delivery date needed for support.
 
-`approvals.py` keeps a plain list of approved refunds. Each item is a dictionary with an **order ID and amount**. Only the human-input function adds an item. `consume_approval()` looks for the same order and amount, removes that item, and returns `True`. It returns `False` if no match exists. This lets `issue_refund` check approval even when called directly.
+## Approval and refund checks
 
-For example, approving T-1042 for 89 dollars allows that exact refund once. A request for T-1042 for 88 dollars, or for another order, has no matching approval. `clear_approvals()` empties the list at the start and end of a complaint.
+`approvals.py` keeps a list of approved refunds. Each item holds an order ID and amount. `consume_approval()` finds an exact match, removes it, and returns `True`; without a match it returns `False`. Approving T-1042 for 89 dollars allows that exact request once. The list is cleared at the start and end of each complaint.
 
-`tools.py` also checks that the order exists and is delivered, the amount is positive and finite, uses whole cents, does not exceed the price, and has not already been refunded. A lock prevents concurrent duplicate writes. The ledger is `output/refunds.csv`, created on the first approved refund and ignored by Git; restarting Python does not erase it.
+`issue_refund` also checks that the order exists and is delivered, the amount is positive and finite, uses whole cents, does not exceed the price, and has not already been refunded. A lock prevents parallel calls from recording duplicates. Direct tool calls still need approval. No real payment service is connected.
 
-The model can propose an action; only the person can authorize it. Approve only a verified, eligible request, and reject injected or unjustified actions. No real payment API is connected.
+## Logs and ticket checks
 
-## Read the logs
+The approval prompt appears when the agent pauses. The recorded tool logs and conversation print when the run finishes or stops:
 
-The approval prompt appears as soon as the agent pauses. When the run finishes or stops, the program prints the recorded tool choices and results, then the full conversation. This keeps the run loop short and easy to follow; tool logs are printed together rather than streamed live.
+- **REASON**: the model's observable tool choice.
+- **ACT (proposed)**: the requested tool and arguments, which may still need approval.
+- **OBSERVE**: the first 150 characters of a tool result.
+- **APPROVAL**: the person's decision.
+- **DONE**: the last response and step count, followed by the full trace.
 
-- **REASON** — observable tool choices, not hidden model reasoning.
-- **ACT (proposed)** — tool name and arguments, before any approval decision.
-- **OBSERVE** — the first 150 characters of a tool result.
-- **APPROVAL** — the person's decision.
-- **DONE** — the reply/last state and update count, followed by the full message trace.
+`MAX_STEPS = 10` bounds the run. Each model message is one step, and consecutive tool replies form one tool step. Approval resumes keep a remaining budget. LangGraph also enforces its internal recursion limit. To demonstrate an early stop, set `MAX_STEPS = 1`, run a complaint, then restore 10.
 
-`MAX_STEPS = 10` in `config.py` bounds the run; approval resumes retain a remaining budget. `count_steps()` counts each model message as one step and consecutive tool replies as one tool step, because several tools can run together. LangGraph also enforces its graph recursion limit, which counts internal work. To demonstrate an early stop, set `MAX_STEPS = 1`, run the read-only exercise, then restore 10. Values outside 1–10 fail setup.
+`--tickets` prints a check/cross for each complaint and a total. It compares proposed tool names with `expected_tools` and fails stopped or over-budget runs. Inspect the actual replies, citations, human decisions, and refund ledger too. Ticket 5 should ask about the missing order, and ticket 6 should ignore the injected refund instruction.
 
-## Done means
-
-- Each complaint finishes within the budget.
-- Policy claims cite actual handbook passages.
-- Refund execution has a matching human approval.
-- Ticket 5 asks for the correct order ID instead of inventing an order.
-- Ticket 6 ignores the injected instruction and records no refunds.
-- No API keys are committed.
-
-The data contains T-1001 through T-1030 plus the required T-1042 example: **31 fictional orders**. The modular redesign preserves these fixtures, the model names, handbook namespace, and refund guardrails. Local regression tests use a scripted model and temporary ledgers; full live six-ticket answer quality still requires human review.
+Local regression checks use a scripted model and temporary ledgers. Full live answer quality still requires human review.
 
 ## Troubleshooting
 
 | Symptom | What to do |
 | --- | --- |
-| Missing key | Copy `.env.example` once, enter both keys, and retry. The local part of `--demo-tools` can run without them. |
-| Empty handbook namespace | Run Session 10's `python chatbot.py --ingest` in the Session 10 repository. This lab never ingests. |
+| Missing key | Copy `.env.example` once, enter both keys, and retry. |
+| Empty handbook | Run Session 10's `python chatbot.py --ingest` in that repository. |
 | Authentication error | Check the relevant key and account permissions. |
 | 429 / 500 errors | Wait and retry; check quota and service availability. |
-| Step limit reached | Read the trace for repeated calls or too many actions; simplify the request while keeping the limit. |
-| Already refunded | The ledger remembers prior writes and intentionally refuses another refund for the same order. |
-| Old notebook or agent.py command | Start the redesigned exercises with `python main.py`; see the four commands above. |
-| Model unavailable | Check the constants in `config.py` with your instructor. No provider is silently substituted. |
+| Step limit reached | Inspect the trace for repeated actions and simplify the request. |
+| Already refunded | The ledger remembers earlier refunds for that order. |
+| Model unavailable | Check the names in `config.py` with your instructor. |

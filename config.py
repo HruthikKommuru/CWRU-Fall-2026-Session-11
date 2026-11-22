@@ -37,15 +37,12 @@ os.environ["LANGSMITH_TRACING"] = "false"
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
 
 
-def configure_logging(verbose: bool = False) -> None:
-    """Choose how much detail to show in the terminal."""
-    level = logging.INFO
-    if verbose:
-        level = logging.DEBUG
-    logging.basicConfig(level=level, format="%(asctime)s | %(levelname)s | %(message)s")
+def configure_logging() -> None:
+    """Show the time, level, and message for each terminal log."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
 
-def load_config(require_keys: bool = True) -> bool:
+def load_config() -> bool:
     """Load private keys and check local setup; return False if something is missing."""
     load_dotenv(ROOT / ".env")
     if not ORDERS_PATH.is_file():
@@ -55,10 +52,9 @@ def load_config(require_keys: bool = True) -> bool:
         logging.error("Set MAX_STEPS in config.py to a value from 1 through 10.")
         return False
 
-    # The local tool exercise works without keys; live model/search modes need both.
-    if require_keys:
-        for key in ("GOOGLE_API_KEY", "PINECONE_API_KEY"):
-            if not os.getenv(key):
-                logging.error("Missing %s. Copy .env.example to .env and add your keys.", key)
-                return False
+    # Both services are needed to run the support agent.
+    for key in ("GOOGLE_API_KEY", "PINECONE_API_KEY"):
+        if not os.getenv(key):
+            logging.error("Missing %s. Copy .env.example to .env and add your keys.", key)
+            return False
     return True

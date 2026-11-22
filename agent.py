@@ -12,31 +12,23 @@ from langgraph.types import Command
 
 from approvals import clear_approvals, review_actions
 from config import CHAT_MODEL, MAX_STEPS, SYSTEM_PROMPT
-from tools import ALL_TOOLS, READ_ONLY_TOOLS
+from tools import TOOLS
 
 logger = logging.getLogger(__name__)
 
 
-def build_agent(read_only: bool = False, model=None):
+def build_agent():
     """Give Gemini its instructions, available tools, and refund approval rule."""
-    # 1. Create Gemini. Local tests can supply a pretend model instead.
-    if model is None:
-        model = init_chat_model(CHAT_MODEL)
+    # Give Gemini all four tools, with a pause BEFORE issue_refund can run.
+    model = init_chat_model(CHAT_MODEL)
+    approval_rule = HumanInTheLoopMiddleware(interrupt_on={"issue_refund": True})
 
-    # 2. Choose the tools. Full mode pauses BEFORE issue_refund can run.
-    tools = READ_ONLY_TOOLS
-    middleware = []
-    if not read_only:
-        tools = ALL_TOOLS
-        approval_rule = HumanInTheLoopMiddleware(interrupt_on={"issue_refund": True})
-        middleware = [approval_rule]
-
-    # 3. Memory saves the conversation while the person makes a decision.
+    # Memory saves the conversation while the person makes a decision.
     return create_agent(
         model=model,
-        tools=tools,
+        tools=TOOLS,
         system_prompt=SYSTEM_PROMPT,
-        middleware=middleware,
+        middleware=[approval_rule],
         checkpointer=InMemorySaver(),
     )
 
@@ -66,11 +58,10 @@ def log_message(message) -> None:
         logger.info("OBSERVE | %s", str(message.content)[:150])
 
 
-def run_agent(agent, message: str, thread_id=None) -> dict:
+def run_agent(agent, message: str) -> dict:
     """Run, check for approval, and resume until the complaint is finished."""
     # 1. Give each complaint its own ID. Keep that ID when resuming after approval.
-    if thread_id is None:
-        thread_id = str(uuid4())
+    thread_id = str(uuid4())
     settings = {"recursion_limit": MAX_STEPS, "configurable": {"thread_id": thread_id}}
     request = {"messages": [{"role": "user", "content": message}]}
     result = {"messages": []}

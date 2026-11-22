@@ -20,6 +20,9 @@ def requested_tools(messages: list) -> set:
 def run_tickets(agent) -> int:
     """Print one routing check per ticket and return zero only when all pass."""
     # 1. Read the complaints. Each dictionary below represents one CSV row.
+    if not TICKETS_PATH.is_file():
+        print("Missing data/test_tickets.csv. Restore the supplied test complaints.")
+        return 1
     rows = pd.read_csv(TICKETS_PATH, keep_default_na=False)
     passed = 0
     for ticket in rows.to_dict("records"):

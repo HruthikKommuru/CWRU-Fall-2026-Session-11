@@ -148,8 +148,7 @@ def issue_refund(order_id: str, amount: float) -> str:
             return "Refund unavailable. Check the amount and local CSV files; no retry is automatic."
 
 
-# Read-only mode gets the first three tools; full mode also gets the approval-gated refund.
-READ_ONLY_TOOLS = [search_handbook, lookup_order, draft_reply]
-ALL_TOOLS = [search_handbook, lookup_order, draft_reply, issue_refund]
-for current_tool in ALL_TOOLS:
+# These are the four tools available to the support agent.
+TOOLS = [search_handbook, lookup_order, draft_reply, issue_refund]
+for current_tool in TOOLS:
     current_tool.handle_validation_error = "Invalid tool arguments. Check the order ID, amount, or query."
